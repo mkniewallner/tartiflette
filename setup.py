@@ -1,10 +1,10 @@
 import os
 import subprocess
 import sys
+from distutils import sysconfig
 
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup, Extension
 from setuptools.command.build_ext import build_ext
-from setuptools.command.build_py import build_py
 
 
 def _find_libgraphqlparser_artifact():
@@ -17,7 +17,7 @@ def _find_libgraphqlparser_artifact():
     return None
 
 
-def _build_libgraphqlparser():
+def _build_libgraphqlparser(extension_filename):
     os.chdir("./libgraphqlparser/.")
     subprocess.run(["cmake", "."], stdout=subprocess.PIPE)
     subprocess.run(["make"], stdout=subprocess.PIPE)
@@ -29,23 +29,24 @@ def _build_libgraphqlparser():
         print("Libgraphqlparser compilation has failed")
         sys.exit(-1)
 
-    os.rename(
-        artifact_path,
-        "tartiflette/language/parsers/libgraphqlparser/cffi/%s"
-        % os.path.basename(artifact_path),
-    )
+    os.rename(artifact_path, extension_filename)
 
 
 class BuildExtCmd(build_ext):
     def run(self):
-        _build_libgraphqlparser()
-        build_ext.run(self)
+        for ext in self.extensions:
+            _build_libgraphqlparser(self.get_ext_fullpath(ext.name))
+
+        super().run()
+
+    def get_ext_filename(self, ext_name):
+        file_name = super().get_ext_filename(ext_name)
+        return f"{file_name.replace(sysconfig.get_config_var('EXT_SUFFIX'), '')}{os.path.splitext(file_name)[1]}"
 
 
-class BuildPyCmd(build_py):
-    def run(self):
-        _build_libgraphqlparser()
-        build_py.run(self)
+class LibGraphQLParserExtension(Extension):
+    def __init__(self, name):
+        super().__init__(name, sources=[])
 
 
 _TEST_REQUIRE = [
@@ -60,7 +61,7 @@ _TEST_REQUIRE = [
 
 _BENCHMARK_REQUIRE = ["pytest-benchmark==3.4.1"]
 
-_VERSION = "1.3.3"
+_VERSION = "1.3.10"
 
 _PACKAGES = find_packages(exclude=["tests*"])
 
@@ -71,7 +72,7 @@ def _read_file(filename):
 
 
 setup(
-    name="tartiflette",
+    name="fondue-wheels",
     version=_VERSION,
     description="GraphQL Engine for Python",
     long_description=_read_file("README.md"),
@@ -91,6 +92,7 @@ setup(
     install_requires=["cffi>=1.0.0,<2.0.0", "lark-parser==0.11.2", "pytz"],
     tests_require=_TEST_REQUIRE,
     extras_require={"test": _TEST_REQUIRE, "benchmark": _BENCHMARK_REQUIRE},
-    cmdclass={"build_ext": BuildExtCmd, "build_py": BuildPyCmd},
+    cmdclass={"build_ext": BuildExtCmd},
+    ext_modules=[LibGraphQLParserExtension("tartiflette.language.parsers.libgraphqlparser.cffi.libgraphqlparser")],
     include_package_data=True,
 )
