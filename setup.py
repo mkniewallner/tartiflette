@@ -19,7 +19,7 @@ def _find_libgraphqlparser_artifact():
     return None
 
 
-def _build_libgraphqlparser(extension_filename=None):
+def _build_libgraphqlparser():
     os.chdir("./libgraphqlparser/.")
     subprocess.run(["cmake", "."], stdout=subprocess.PIPE)
     subprocess.run(["make"], stdout=subprocess.PIPE)
@@ -33,19 +33,13 @@ def _build_libgraphqlparser(extension_filename=None):
 
     os.rename(
         artifact_path,
-        extension_filename
-        or f"tartiflette/language/parsers/libgraphqlparser/cffi/{os.path.basename(artifact_path)}",
+        f"tartiflette/language/parsers/libgraphqlparser/cffi/{os.path.basename(artifact_path)}",
     )
 
 
 class BuildExtCmd(build_ext):
     def run(self):
-        for ext in self.extensions:
-            _build_libgraphqlparser(self.get_ext_fullpath(ext.name))
-
-    def get_ext_filename(self, ext_name):
-        file_name = super().get_ext_filename(ext_name)
-        return f"{file_name.replace(sysconfig.get_config_var('EXT_SUFFIX'), '')}{os.path.splitext(file_name)[1]}"
+        _build_libgraphqlparser()
 
 
 class BuildPyCmd(build_py):
@@ -55,8 +49,8 @@ class BuildPyCmd(build_py):
 
 
 class LibGraphQLParserExtension(Extension):
-    def __init__(self, name):
-        super().__init__(name, sources=[])
+    def __init__(self):
+        super().__init__("libgraphqlparser", sources=[])
 
 
 _TEST_REQUIRE = [
@@ -103,10 +97,6 @@ setup(
     tests_require=_TEST_REQUIRE,
     extras_require={"test": _TEST_REQUIRE, "benchmark": _BENCHMARK_REQUIRE},
     cmdclass={"build_ext": BuildExtCmd, "build_py": BuildPyCmd},
-    ext_modules=[
-        LibGraphQLParserExtension(
-            "tartiflette.language.parsers.libgraphqlparser.cffi.libgraphqlparser"
-        )
-    ],
+    ext_modules=[LibGraphQLParserExtension()],
     include_package_data=True,
 )
